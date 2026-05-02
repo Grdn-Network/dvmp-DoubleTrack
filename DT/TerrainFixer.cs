@@ -489,59 +489,49 @@ public static class PersistentTerrainManager
     private static void WeldSeams(Terrain current, Terrain neighbor, bool horizontal)
     {
         if (current == null || neighbor == null) return;
-    
+
         int res = current.terrainData.heightmapResolution;
-        float[,] myHeights = current.terrainData.GetHeights(0, 0, res, res);
-        float[,] theirHeights = neighbor.terrainData.GetHeights(0, 0, res, res);
-
-        if (horizontal) // Neighbor is to the Right
+    
+        // We only need the single edge row/column from the neighbor
+        // and the single edge row/column from ourselves.
+        if (horizontal) // Current is Right, Neighbor is Left
         {
-            for (int i = 0; i < res; i++)
-            {
-                float avg = (myHeights[i, res - 1] + theirHeights[i, 0]) * 0.5f;
-                myHeights[i, res - 1] = avg;
-                theirHeights[i, 0] = avg;
-            }
-        }
-        else // Neighbor is Above
-        {
-            for (int i = 0; i < res; i++)
-            {
-                float avg = (myHeights[res - 1, i] + theirHeights[0, i]) * 0.5f;
-                myHeights[res - 1, i] = avg;
-                theirHeights[0, i] = avg;
-            }
-        }
+            float[,] theirEdge = neighbor.terrainData.GetHeights(res - 1, 0, 1, res);
+            float[,] myHeights = current.terrainData.GetHeights(0, 0, 1, res);
 
-        current.terrainData.SetHeights(0, 0, myHeights);
-        neighbor.terrainData.SetHeights(0, 0, theirHeights);
+            for (int i = 0; i < res; i++) myHeights[i, 0] = theirEdge[i, 0];
+        
+            current.terrainData.SetHeights(0, 0, myHeights);
+        }
+        else // Current is Top, Neighbor is Bottom
+        {
+            float[,] theirEdge = neighbor.terrainData.GetHeights(0, res - 1, res, 1);
+            float[,] myHeights = current.terrainData.GetHeights(0, 0, res, 1);
+
+            for (int i = 0; i < res; i++) myHeights[0, i] = theirEdge[0, i];
+
+            current.terrainData.SetHeights(0, 0, myHeights);
+        }
     }
     
     private static void FinalizeTile(Vector2Int coord, Terrain activeTerrain)
     {
-        // Define the 4 directions
-        Vector2Int[] neighbors = { Vector2Int.up, Vector2Int.down, Vector2Int.left, Vector2Int.right };
+        // A tile only snaps to its Left and Bottom neighbors.
+        // This ensures every seam is reconciled exactly once without recursion.
+        Terrain left = TerrainGrid.Instance.GetLoadedTerrainAt(coord + Vector2Int.left);
+        Terrain bottom = TerrainGrid.Instance.GetLoadedTerrainAt(coord + Vector2Int.down);
 
-        foreach (var dir in neighbors)
-        {
-            Vector2Int neighborCoord = coord + dir;
-            Terrain neighborTerrain = TerrainGrid.Instance.GetLoadedTerrainAt(neighborCoord);
+        if (left != null) WeldSeams(activeTerrain, left, true);
+        if (bottom != null) WeldSeams(activeTerrain, bottom, false);
 
-            if (neighborTerrain != null)
-            {
-                // If the neighbor is already processed, weld to it.
-                // If the neighbor is NOT processed, it will eventually call 
-                // this same method when IT finishes and weld to US.
-                bool horizontal = (dir == Vector2Int.left || dir == Vector2Int.right);
-            
-                // Note: Order matters for the WeldSeams logic (Left/Right, Top/Bottom)
-                if (dir == Vector2Int.right) WeldSeams(activeTerrain, neighborTerrain, true);
-                else if (dir == Vector2Int.left) WeldSeams(neighborTerrain, activeTerrain, true);
-                else if (dir == Vector2Int.up) WeldSeams(activeTerrain, neighborTerrain, false);
-                else if (dir == Vector2Int.down) WeldSeams(neighborTerrain, activeTerrain, false);
-            }
-        }
-    
+        // Also: If a Right or Top neighbor was already loaded before we finished,
+        // they need to snap to US now.
+        Terrain right = TerrainGrid.Instance.GetLoadedTerrainAt(coord + Vector2Int.right);
+        Terrain top = TerrainGrid.Instance.GetLoadedTerrainAt(coord + Vector2Int.up);
+
+        if (right != null) WeldSeams(right, activeTerrain, true);
+        if (top != null) WeldSeams(top, activeTerrain, false);
+
         activeTerrain.Flush();
     }
 }

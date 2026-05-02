@@ -1,4 +1,6 @@
 using System.Collections;
+using Bolt.Dependencies.NCalc;
+using TMPro;
 using UnityEngine;
 using UnityModManagerNet;
 
@@ -39,29 +41,16 @@ public static class SignalFixer
 
             if (doubleInfo.IsSiding ^ doubleInfo.Offset > 0)
             {
-                signals[0].transform.localScale = signals[0].transform.localScale with
-                {
-                    x = signals[0].transform.localScale.x * -1
-                };
+                MirrorSignal(signals[0]);
 
-                if (signals.Count == 4)
-                    signals[2].transform.localScale = signals[2].transform.localScale with
-                    {
-                        x = signals[2].transform.localScale.x * -1
-                    };
+                if (signals.Count == 4) MirrorSignal(signals[2]);
             }
             else
             {
-                signals[1].transform.localScale = signals[1].transform.localScale with
-                {
-                    x = signals[1].transform.localScale.x * -1
-                };
+                MirrorSignal(signals[1]);
 
-                if (signals.Count == 4)
-                    signals[3].transform.localScale = signals[3].transform.localScale with
-                    {
-                        x = signals[3].transform.localScale.x * -1
-                    };
+                if (signals.Count == 4) MirrorSignal(signals[3]);
+
             }
 
             if (signals.Count != 4) continue;
@@ -70,6 +59,30 @@ public static class SignalFixer
             if(Vector3.Dot(signals[2].transform.forward,signals[3].transform.position-signals[2].transform.position) > 0) SwapSignalPositions(signals[2], signals[3]);
         }
 
+    }
+
+    private static void MirrorSignal(GameObject signal)
+    {
+        signal.transform.localScale = signal.transform.localScale with
+        {
+            x = signal.transform.localScale.x * -1
+        };
+        
+        foreach (BoxCollider box in signal.GetComponentsInChildren<BoxCollider>())
+        {
+            box.size = box.size with
+            {
+                x = box.size.x * -1
+            };
+        }
+        
+        foreach (TextMeshPro txt in signal.GetComponentsInChildren<TextMeshPro>())
+        {
+            txt.transform.localScale = txt.transform.localScale with
+            {
+                x = txt.transform.localScale.x * -1
+            };
+        }
     }
         
     
