@@ -6,6 +6,7 @@ using Cysharp.Threading.Tasks.Triggers;
 using DV.CabControls;
 using DV.CabControls.NonVR;
 using DV.Interaction;
+using DV.Logic.Job;
 using DV.PointSet;
 using DV.Signs;
 using DV.TerrainSystem;
@@ -21,26 +22,13 @@ using UnityEngine.SceneManagement;
 using Object = UnityEngine.Object;
 
 namespace DoubleTrack;
-
-    public static class TrackPlacerEntry
-    {
-        public static UnityModManager.ModEntry ModEntry;
-        public static bool Load(UnityModManager.ModEntry entry)
-        {
-            ModEntry = entry;
-            var harmony = new Harmony(entry.Info.Id);
-            harmony.PatchAll();
-            SceneManager.sceneLoaded += AllTracksPatch.LoadTracks;
-            PersistentTerrainManager.Initialize();
-            return true;
-        }
-    }
     
     public class AllTracksPatch
     {
         private static Transform railwayParent;
-        public static List<RailTrack> AddedTracks;
-        public static int junctionIDCounter;
+        public static List<RailTrack> AddedTracks = null;
+        public static List<Junction> AddedJunctions = null;
+        public static int trackCounter;
         private static GameObject railwayGo;
         private static List<string> LoadTargets()
         {
@@ -67,7 +55,8 @@ namespace DoubleTrack;
             if (RailTrackRegistry.Instance == null) return;
             
             AddedTracks = new List<RailTrack>();
-            junctionIDCounter = 0;
+            AddedJunctions = new List<Junction>();
+            trackCounter = 0;
             
             railwayGo = GameObject.Find("[railway]");
             if (railwayGo == null) return;
@@ -92,7 +81,7 @@ namespace DoubleTrack;
                 string mode = parts[0].Trim().ToUpper();
 
                 // 1. Handle Skip Mode (#)
-                if (mode == "#")
+                if (mode.IndexOf('#') != -1)
                 {
                     Debug.Log($"[DoubleTrack] Skipping entry per '#' marker: {entry}");
                     continue;
@@ -117,8 +106,9 @@ namespace DoubleTrack;
                 if (!float.TryParse(parts[6], out float searchZ)) continue;
 
                 // 3. Handle Siding/Split Mode (S)
-                if (mode == "S")
+                if (mode.IndexOf('S') != -1)
                 {
+                    trackCounter++;
                     Vector3 searchPos = new Vector3(searchX, 0, searchZ);
 
                     RailTrack template = allTracks
@@ -157,6 +147,18 @@ namespace DoubleTrack;
                     RailTrack[] newMains = new[] { tempA[0], tempB[0], tempB[1] };
                     
                     Object.Destroy(tempA[1]);
+
+                    Debug.Log(mode.IndexOf('I'));
+                    if (mode.IndexOf('I') == -1)
+                    {
+                        newTrack.name = "[y]_[doubletrack]_[Siding-" + trackCounter + "-D]";
+                        newMains[1].name = "[y#]_[doubletrack]_[Main-" + trackCounter + "-T]";
+                    }
+                    else
+                    {
+                        newMains[1].name = "[y]_[doubletrack]_[Siding-" + trackCounter + "-T]";
+                        newTrack.name = "[y#]_[doubletrack]_[Main-" + trackCounter + "-D]";
+                    }
                     
                     // 4. Set up Junctions
                     SetUpPrefabJunction(newMains[0], newMains[1], newTrack, xzOffset, "Split", true);
@@ -177,7 +179,7 @@ namespace DoubleTrack;
                         track.transform.SetParent(railwayParent);
                         track.gameObject.SetActive(true);
                     }
-
+                    
                     allTracks.Remove(template);
                     if(!allTracks.Contains(newMains[0]))allTracks.Add(newMains[0]);
                     if(!allTracks.Contains(newMains[2]))allTracks.Add(newMains[2]);
@@ -208,6 +210,12 @@ namespace DoubleTrack;
             RailTrack prefabThrough = juncGroup.transform.Find("[track through]").GetComponent<RailTrack>();
             RailTrack prefabDiverge = juncGroup.transform.Find("[track diverging]").GetComponent<RailTrack>();
             Junction junction = juncGroup.GetComponentInChildren<Junction>();
+
+            if (AddedJunctions.Contains(junction))
+            {
+                Debug.LogError("Junction alrady exists");
+                return junction;
+            }
 
             VisualSwitch visualSwitch = juncGroup.GetComponentInChildren<VisualSwitch>();
             visualSwitch.invertDirection = true;
@@ -252,13 +260,15 @@ namespace DoubleTrack;
             }
             
             Junction.JunctionData junctionData = new Junction.JunctionData();
-            junctionData.junctionIndex = junctionIDCounter + 1000;
-            junctionData.junctionId = junctionIDCounter;
+
+            int junctionCounter = trackCounter * 2;
+            if(isDiverge)junctionCounter++;
+            junctionData.junctionIndex = junctionCounter + 1000;
+            junctionData.junctionId = junctionCounter;
             junctionData.position = junction.transform.position;
-            junctionData.junctionIdLong = "EXC-" + junctionIDCounter.ToString("D4")+"-MAIN";
+            if(isDiverge) junctionData.junctionIdLong = "EXC-" + trackCounter.ToString("D4")+"-A";
+            else junctionData.junctionIdLong = "EXC-" + trackCounter.ToString("D4")+"-B";
             junction.junctionData = junctionData;
-            
-            junctionIDCounter++;
 
             // Positioning
             Vector3 anchorPos = isDiverge ? anchor.curve.Last().position : anchor.curve[0].position;
@@ -317,6 +327,9 @@ namespace DoubleTrack;
             junction.gameObject.SetActive(true);
             juncGroup.SetActive(true);
             
+            junction.gameObject.GetOrAddComponent<SwitchManager>();
+            
+            AddedJunctions.Add(junction);
 
             return junction;
         }

@@ -282,6 +282,9 @@
       <Reference Include="mscorlib">
         <HintPath>..\..\DerailValley_Data\Managed\mscorlib.dll</HintPath>
       </Reference>
+      <Reference Include="MultiplayerAPI">
+        <HintPath>..\..\Mods\Multiplayer\MultiplayerAPI.dll</HintPath>
+      </Reference>
       <Reference Include="NatureManufacture.Wind">
         <HintPath>..\..\DerailValley_Data\Managed\NatureManufacture.Wind.dll</HintPath>
       </Reference>
